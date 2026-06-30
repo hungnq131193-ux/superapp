@@ -1,0 +1,19 @@
+services:
+  backend:
+    build: ./backend
+    env_file: .env.example
+    environment:
+      - TEMP_DIR=/tmp/paddleocr-web
+    ports: ["8000:8000"]
+    volumes:
+      - paddleocr-cache:/root/.paddleocr
+      - paddle-models:/root/.paddlex
+  frontend:
+    build: ./frontend
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    ports: ["5173:80"]
+    depends_on: [backend]
+volumes:
+  paddleocr-cache:
+  paddle-models:

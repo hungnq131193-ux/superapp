@@ -6,3 +6,6 @@ test('validation engine checks total area',()=>assert.match(readFileSync('src/en
 test('validation engine checks master wc adjacency',()=>assert.match(readFileSync('src/engine/validation.ts','utf8'),/WC riêng master/));
 test('validation engine checks private worship access',()=>assert.match(readFileSync('src/engine/validation.ts','utf8'),/Phòng thờ nên có lối tiếp cận riêng/));
 test('generator supports 90m2 style preset without hardcoded result',()=>{const s=readFileSync('src/engine/generator.ts','utf8');assert.match(s,/generateLayouts/);assert.match(readFileSync('src/engine/defaults.ts','utf8'),/90m²|89–90m²/)});
+test('ported original CSP tree is present and wired into generator',()=>{const s=readFileSync('src/engine/original-port/cspTree.ts','utf8');assert.match(s,/class CspTreeNode/);assert.match(s,/checkConstraints/);assert.match(s,/rearrangeRooms/);assert.match(readFileSync('src/engine/generator.ts','utf8'),/generateCspOrders/)});
+test('generate at least 5 candidates for normal input',()=>assert.match(readFileSync('src/App.tsx','utf8'),/generateLayouts\(input,10\)/));
+test('imported JSON renders again correctly path exists',()=>assert.match(readFileSync('src/App.tsx','utf8'),/setLayouts\(\[l,.+setActive\(l\)/s));

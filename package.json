@@ -1,0 +1,19 @@
+{
+  "name": "viet-floor-plan-studio",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/engine.test.mjs",
+    "lint": "node scripts/static-check.mjs"
+  },
+  "dependencies": {
+    "vite": "8.1.2",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {}
+}

@@ -1,1 +1,0 @@
-export default function JobStatus({job,error}){ if(error) return <div className="alert error">{error}</div>; if(!job) return null; return <div className="status"><span>Trạng thái: <b>{job.status}</b></span><progress value={job.progress||0} max="100" />{job.error&&<span className="error">{job.error}</span>}</div> }

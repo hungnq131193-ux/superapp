@@ -1,5 +1,0 @@
-import {useState} from 'react'; import {downloadUrl} from '../api'; import PreviewPane from './PreviewPane';
-export default function ResultTabs({result,file,onReset}){ const [tab,setTab]=useState('Text'); if(!result) return null; const tabs=['Text','JSON','Markdown','Preview']; const text=result.text||''; const md=result.markdown||'';
- const copy=()=>navigator.clipboard.writeText(text);
- return <section className="results"><div className="tabs">{tabs.map(t=><button className={tab===t?'active':''} onClick={()=>setTab(t)} key={t}>{t}</button>)}</div><div className="actions"><button onClick={copy}>Copy text</button><a href={downloadUrl(result.job_id,'txt')}>Tải .txt</a><a href={downloadUrl(result.job_id,'json')}>Tải .json</a>{md&&<a href={downloadUrl(result.job_id,'md')}>Tải .md</a>}<button onClick={onReset}>Xóa / làm lại</button></div>
- <div className="panel">{tab==='Text'&&<pre>{text}</pre>}{tab==='JSON'&&<pre>{JSON.stringify(result,null,2)}</pre>}{tab==='Markdown'&&<pre>{md||'Không có markdown từ pipeline; xem tab Text/JSON.'}</pre>}{tab==='Preview'&&<PreviewPane file={file} result={result}/>}</div></section> }

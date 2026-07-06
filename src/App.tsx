@@ -1,2 +1,96 @@
-import {useRef,useState} from 'react';import {defaultInput} from './engine/defaults';import {generateLayouts} from './engine/generator';import {validateLayout} from './engine/validation';import {scoreLayout} from './engine/scoring';import {download,exportJson,saveLayout,getSaved} from './utils/storage';import {exportElement,exportPdf} from './utils/exporters';import {Wizard} from './components/Wizard';import {LayoutViewer} from './components/LayoutViewer';import type {DesignInput,Layout} from './types';import './styles/main.css';
-export default function App(){const [input,setInput]=useState<DesignInput>(defaultInput),[layouts,setLayouts]=useState<Layout[]>([]),[active,setActive]=useState<Layout|null>(null),[dark,setDark]=useState(false),[loading,setLoading]=useState(false);const ref=useRef<HTMLDivElement>(null);function generate(){setLoading(true);setTimeout(()=>{const out=generateLayouts(input,10);setLayouts(out);setActive(out[0]);setLoading(false)},60)}function update(l:Layout){l.issues=validateLayout(l);l.score=scoreLayout(l);setActive(l);setLayouts(xs=>xs.map(x=>x.id===l.id?l:x))}async function exportImg(t:'png'|'svg'){const el=document.getElementById('plan-canvas');if(!el)return;const data=await exportElement(el,t);download(await (await fetch(data)).blob(),`${active?.name}.${t}`)}function importJson(f:File){f.text().then(t=>{const l=JSON.parse(t);setLayouts([l,...layouts]);setActive(l)})}return <main className={dark?'dark':''}><header><div><b>Xưởng Thiết Kế Mặt Bằng Việt</b><small>CSP heuristic client-side · bản tham khảo</small></div><button onClick={()=>setDark(!dark)}>Sáng/tối</button></header><div className="hero"><h1>Thiết kế mặt bằng nhà ở 2D trên trình duyệt</h1><p>Nhập đất, số tầng, nhu cầu phòng; app sinh nhiều phương án, chấm điểm, cảnh báo ràng buộc và cho phép chỉnh sửa/xuất file.</p><button onClick={()=>{setActive(null);window.scrollTo(0,0)}}>Tạo thiết kế mới</button></div><div className="layout"><Wizard input={input} setInput={setInput} onGenerate={generate}/><aside className="panel"><h2>Thư viện đã lưu</h2>{getSaved().map(l=><button key={l.id} onClick={()=>setActive(l)}>{l.name} · {l.score.total}</button>)}<label className="import">Nhập JSON<input type="file" accept="application/json" onChange={e=>e.target.files?.[0]&&importJson(e.target.files[0])}/></label></aside></div>{loading&&<div className="loading">Đang sinh phương án theo ràng buộc…</div>}{layouts.length>0&&<section className="cards">{layouts.map(l=><button className={active?.id===l.id?'card active':'card'} key={l.id} onClick={()=>setActive(l)}><b>{l.name}</b><span>{l.score.total}/100</span><small>{l.issues.length} cảnh báo</small></button>)}</section>}{active&&<div ref={ref}><LayoutViewer layout={active} onChange={update}/><section className="panel actions"><button onClick={()=>saveLayout(active)}>Lưu localStorage</button><button onClick={()=>download(exportJson(active),`${active.name}.json`)}>Xuất JSON</button><button onClick={()=>exportImg('png')}>Xuất PNG</button><button onClick={()=>exportImg('svg')}>Xuất SVG</button><button onClick={()=>exportPdf(active,document.getElementById('plan-canvas')!)}>Xuất PDF</button></section></div>}<footer>Bản vẽ chỉ mang tính tham khảo, cần kiến trúc sư/kỹ sư kiểm tra trước khi thi công.</footer></main>}
+import {useEffect, useState} from 'react';
+import {defaultInput} from './engine/defaults';
+import {recomputeLayout} from './engine';
+import {Wizard} from './components/Wizard';
+import {LayoutViewer} from './components/LayoutViewer';
+import {AppHeader} from './components/AppHeader';
+import {Hero} from './components/Hero';
+import {SavedLibrary} from './components/SavedLibrary';
+import {CandidateList} from './components/CandidateList';
+import {ExportBar} from './components/ExportBar';
+import {useGenerator} from './hooks/useGenerator';
+import {useSavedLayouts} from './hooks/useSavedLayouts';
+import {useLayoutHistory} from './hooks/useLayoutHistory';
+import {parseLayoutJson} from './utils/importSchema';
+import {UpdateToast} from './components/UpdateToast';
+import type {DesignInput, Layout} from './types';
+import './styles/main.css';
+
+export default function App() {
+  const [input, setInput] = useState<DesignInput>(defaultInput);
+  const [dark, setDark] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
+  const {layouts, active, setActive, generating, generate, replace, prepend} = useGenerator();
+  const {saved, save} = useSavedLayouts();
+  const history = useLayoutHistory();
+
+  // Layout đang xem đổi (sinh mới/chọn card/nhập JSON) → lịch sử undo bắt đầu lại.
+  useEffect(() => {
+    if (active?.id !== history.layout?.id) history.reset(active);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.id]);
+
+  function update(l: Layout) {
+    const computed = history.commit(l);
+    replace(computed);
+  }
+
+  function undo() {
+    const prev = history.undo();
+    if (prev) replace(prev);
+  }
+
+  function redo() {
+    const next = history.redo();
+    if (next) replace(next);
+  }
+
+  function importJson(f: File) {
+    f.text()
+      .then(t => {
+        const result = parseLayoutJson(t);
+        if (result.ok) {
+          setImportErrors([]);
+          prepend(result.layout);
+        } else {
+          setImportErrors(result.errors);
+        }
+      })
+      .catch(() => setImportErrors(['Không đọc được tệp. Hãy thử lại với tệp JSON đã xuất từ ứng dụng này.']));
+  }
+
+  return (
+    <main className={dark ? 'dark' : ''}>
+      <AppHeader dark={dark} onToggleDark={() => setDark(!dark)} />
+      <Hero onNewDesign={() => {setActive(null); window.scrollTo(0, 0);}} />
+      <div className="layout">
+        <Wizard input={input} setInput={setInput} onGenerate={() => generate(input)} />
+        <SavedLibrary saved={saved} onSelect={setActive} onImportFile={importJson} />
+      </div>
+      {importErrors.length > 0 && (
+        <div className="importErrors panel" role="alert">
+          <b>Không nhập được tệp JSON:</b>
+          <ul>{importErrors.map((e, i) => <li key={i}>{e}</li>)}</ul>
+          <button onClick={() => setImportErrors([])}>Đóng</button>
+        </div>
+      )}
+      {generating && <div className="loading">Đang sinh phương án theo ràng buộc…</div>}
+      <CandidateList layouts={layouts} activeId={active?.id ?? null} onSelect={setActive} />
+      {active && (
+        <div>
+          <LayoutViewer
+            layout={active}
+            onChange={update}
+            canUndo={history.canUndo}
+            canRedo={history.canRedo}
+            onUndo={undo}
+            onRedo={redo}
+          />
+          <ExportBar layout={active} onSave={save} />
+        </div>
+      )}
+      <footer>Bản vẽ chỉ mang tính tham khảo, cần kiến trúc sư/kỹ sư kiểm tra trước khi thi công.</footer>
+      <UpdateToast />
+    </main>
+  );
+}

@@ -1,3 +1,109 @@
-import type {Layout,Room} from '../types';import {useState} from 'react';import {uid} from '../utils/geometry';
-const colors:Record<string,string>={living:'#fbbf24',kitchen:'#fb923c',bedroom:'#60a5fa',master:'#818cf8',wc:'#2dd4bf','master-wc':'#14b8a6',worship:'#c084fc',garage:'#94a3b8',stair:'#f87171',void:'#86efac',yard:'#bbf7d0',laundry:'#a7f3d0',storage:'#d6d3d1',balcony:'#bae6fd'};
-export function LayoutViewer({layout,onChange}:{layout:Layout;onChange:(l:Layout)=>void}){const [floor,setFloor]=useState(1),[grid,setGrid]=useState(true),[zoom,setZoom]=useState(32);const rooms=layout.floors.find(f=>f.level===floor)?.rooms||[];function patchRoom(id:string,p:Partial<Room>){const n=structuredClone(layout);for(const f of n.floors){const r=f.rooms.find(x=>x.id===id);if(r)Object.assign(r,p)}onChange(n)}function addRoom(){const n=structuredClone(layout);n.floors.find(f=>f.level===floor)!.rooms.push({id:uid('room'),name:'Phòng mới',type:'storage',floor,x:.3,y:.3,width:2,height:2,targetArea:4});onChange(n)}return <section className="panel"><div className="viewerHead"><h2>{layout.name} · {layout.score.total}/100</h2><div>{layout.floors.map(f=><button className={f.level===floor?'active':''} onClick={()=>setFloor(f.level)} key={f.level}>Tầng {f.level}</button>)}<button onClick={()=>setGrid(!grid)}>Lưới</button><input type="range" min="20" max="60" value={zoom} onChange={e=>setZoom(+e.target.value)}/></div></div><div id="plan-canvas" className="canvasWrap"><svg width={layout.input.plot.width*zoom+70} height={layout.input.plot.depth*zoom+70} role="img"><defs><pattern id="grid" width={zoom} height={zoom} patternUnits="userSpaceOnUse"><path d={`M ${zoom} 0 L 0 0 0 ${zoom}`} fill="none" stroke="#e2e8f0" strokeWidth="1"/></pattern></defs><g transform="translate(40 20)"><rect width={layout.input.plot.width*zoom} height={layout.input.plot.depth*zoom} fill={grid?'url(#grid)':'#fff'} stroke="#0f172a" strokeWidth="2"/>{rooms.map(r=><g key={r.id}><rect x={r.x*zoom} y={r.y*zoom} width={r.width*zoom} height={r.height*zoom} fill={colors[r.type]||'#ddd'} stroke="#0f172a" rx="6" opacity=".92"/><text x={(r.x+.12)*zoom} y={(r.y+.5)*zoom} fontSize="12" fontWeight="700">{r.name}</text><text x={(r.x+.12)*zoom} y={(r.y+.95)*zoom} fontSize="11">{(r.width*r.height).toFixed(1)}m² · {r.width}x{r.height}m</text></g>)}<text x={layout.input.plot.width*zoom/2-22} y={-6}>{layout.input.plot.width}m</text><text x={layout.input.plot.width*zoom+8} y={layout.input.plot.depth*zoom/2}>{layout.input.plot.depth}m</text></g></svg></div><div className="issues">{layout.issues.map((i,idx)=><p className={i.severity} key={idx}>{i.message}</p>)}</div><details open><summary>Chỉnh sửa phòng bằng form</summary><button onClick={addRoom}>Thêm phòng</button>{rooms.map(r=><div className="roomEdit" key={r.id}><input value={r.name} onChange={e=>patchRoom(r.id,{name:e.target.value})}/><select value={r.type} onChange={e=>patchRoom(r.id,{type:e.target.value as any})}>{Object.keys(colors).map(c=><option key={c}>{c}</option>)}</select>{(['x','y','width','height'] as const).map(k=><label key={k}>{k}<input type="number" step="0.1" value={r[k]} onChange={e=>patchRoom(r.id,{[k]:+e.target.value})}/></label>)}<button onClick={()=>{const n=structuredClone(layout);n.floors.find(f=>f.level===floor)!.rooms=n.floors.find(f=>f.level===floor)!.rooms.filter(x=>x.id!==r.id);onChange(n)}}>Xóa</button></div>)}</details><div className="rooms">{rooms.map(r=><span key={r.id}>{r.name}: {(r.width*r.height).toFixed(1)}m²</span>)}</div></section>}
+import {useState} from 'react';
+import type {Layout, Room, ValidationIssue} from '../types';
+import {uid} from '../utils/geometry';
+import {repairRooms} from '../engine/pipeline/repair';
+import {PlanCanvas} from './viewer/PlanCanvas';
+import {FloorTabs} from './viewer/FloorTabs';
+import {IssueList} from './viewer/IssueList';
+import {RoomInspector} from './viewer/RoomInspector';
+
+interface Props {
+  layout: Layout;
+  onChange: (l: Layout) => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
+}
+
+export function LayoutViewer({layout, onChange, canUndo, canRedo, onUndo, onRedo}: Props) {
+  const [floor, setFloor] = useState(1);
+  const [grid, setGrid] = useState(true);
+  const [zoom, setZoom] = useState(32);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [highlightIds, setHighlightIds] = useState<string[]>([]);
+
+  const activeFloor = layout.floors.some(f => f.level === floor) ? floor : layout.floors[0]?.level ?? 1;
+  const rooms = layout.floors.find(f => f.level === activeFloor)?.rooms || [];
+  const selected = layout.floors.flatMap(f => f.rooms).find(r => r.id === selectedId) || null;
+
+  function patchRoom(id: string, patch: Partial<Room>) {
+    const next = structuredClone(layout);
+    for (const f of next.floors) {
+      const r = f.rooms.find(x => x.id === id);
+      if (r) Object.assign(r, patch);
+    }
+    onChange(next);
+  }
+
+  function addRoom() {
+    const next = structuredClone(layout);
+    const target = next.floors.find(f => f.level === activeFloor);
+    if (!target) return;
+    const room: Room = {id: uid('room'), name: 'Phòng mới', type: 'storage', floor: activeFloor, x: 0.3, y: 0.3, width: 2, height: 2, targetArea: 4};
+    target.rooms.push(room);
+    setSelectedId(room.id);
+    onChange(next);
+  }
+
+  function deleteRoom(id: string) {
+    const next = structuredClone(layout);
+    for (const f of next.floors) f.rooms = f.rooms.filter(r => r.id !== id);
+    if (selectedId === id) setSelectedId(null);
+    onChange(next);
+  }
+
+  function highlight(issue: ValidationIssue) {
+    const ids = issue.roomIds || [];
+    setHighlightIds(ids);
+    // Nhảy về tầng chứa phòng đầu tiên của cảnh báo.
+    const target = layout.floors.find(f => f.rooms.some(r => ids.includes(r.id)));
+    if (target) setFloor(target.level);
+    window.setTimeout(() => setHighlightIds(h => (h === ids ? [] : h)), 2600);
+  }
+
+  function autoFix() {
+    const next = structuredClone(layout);
+    for (const f of next.floors) {
+      f.rooms = repairRooms(f.rooms, layout.input.plot.width, layout.input.plot.depth).rooms;
+    }
+    onChange(next);
+  }
+
+  return (
+    <section className="panel">
+      <div className="viewerHead">
+        <h2>{layout.name} · {layout.score.total}/100</h2>
+        <div className="viewerTools">
+          <FloorTabs layout={layout} floor={activeFloor} onChange={l => {setFloor(l); setSelectedId(null);}} />
+          <button onClick={() => setGrid(!grid)}>Lưới</button>
+          <button aria-label="Hoàn tác" disabled={!canUndo} onClick={onUndo}>↶ Hoàn tác</button>
+          <button aria-label="Làm lại" disabled={!canRedo} onClick={onRedo}>↷ Làm lại</button>
+          <input aria-label="Cỡ bản vẽ" type="range" min="20" max="60" value={zoom} onChange={e => setZoom(+e.target.value)} />
+        </div>
+      </div>
+      <PlanCanvas
+        layout={layout}
+        floor={activeFloor}
+        zoom={zoom}
+        grid={grid}
+        selectedId={selectedId}
+        highlightIds={highlightIds}
+        onSelect={setSelectedId}
+        onRoomPatch={patchRoom}
+      />
+      <div className="scoreRow">
+        {layout.score.explanations.map((x, i) => <small key={i}>{x}</small>)}
+      </div>
+      <IssueList layout={layout} onHighlight={highlight} onAutoFix={autoFix} />
+      <RoomInspector room={selected} onPatch={patchRoom} onDelete={deleteRoom} onAdd={addRoom} />
+      <div className="rooms">
+        {rooms.map(r => (
+          <span key={r.id} className={r.id === selectedId ? 'active' : ''} onClick={() => setSelectedId(r.id)}>
+            {r.name}: {(r.width * r.height).toFixed(1)}m²
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}

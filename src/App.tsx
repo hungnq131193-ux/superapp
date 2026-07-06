@@ -12,6 +12,7 @@ import {useGenerator} from './hooks/useGenerator';
 import {useSavedLayouts} from './hooks/useSavedLayouts';
 import {useLayoutHistory} from './hooks/useLayoutHistory';
 import {parseLayoutJson} from './utils/importSchema';
+import {UpdateToast} from './components/UpdateToast';
 import type {DesignInput, Layout} from './types';
 import './styles/main.css';
 
@@ -89,6 +90,7 @@ export default function App() {
         </div>
       )}
       <footer>Bản vẽ chỉ mang tính tham khảo, cần kiến trúc sư/kỹ sư kiểm tra trước khi thi công.</footer>
+      <UpdateToast />
     </main>
   );
 }

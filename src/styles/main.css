@@ -41,3 +41,7 @@ button.autofix{background:#dc2626;color:#fff;width:100%;min-height:44px}
 .importErrors{max-width:1120px;margin:10px auto;border:2px solid #dc2626;background:#fef2f2;color:#7f1d1d}
 .importErrors ul{margin:8px 0;padding-left:20px}
 .dark .importErrors{background:#3f1d1d;color:#fecaca}
+
+/* ===== Pha 6: PWA ===== */
+.updateToast{position:fixed;inset:auto 16px 16px;z-index:6;display:flex;align-items:center;gap:10px;background:#0f172a;color:#fff;padding:14px 16px;border-radius:16px;box-shadow:0 20px 50px #0006;flex-wrap:wrap}
+.updateToast button{margin:0;min-height:40px}

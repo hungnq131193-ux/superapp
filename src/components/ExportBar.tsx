@@ -6,8 +6,11 @@ export function ExportBar({layout, onSave}: {layout: Layout; onSave: (l: Layout)
   async function exportImg(t: 'png' | 'svg') {
     const el = document.getElementById('plan-canvas');
     if (!el) return;
-    const data = await exportElement(el, t);
-    download(await (await fetch(data)).blob(), `${layout.name}.${t}`);
+    try {
+      download(await exportElement(el, t), `${layout.name}.${t}`);
+    } catch (e) {
+      console.error('Xuất ảnh thất bại:', e);
+    }
   }
   return (
     <section className="panel actions">
@@ -15,10 +18,7 @@ export function ExportBar({layout, onSave}: {layout: Layout; onSave: (l: Layout)
       <button onClick={() => download(exportJson(layout), `${layout.name}.json`)}>Xuất JSON</button>
       <button onClick={() => exportImg('png')}>Xuất PNG</button>
       <button onClick={() => exportImg('svg')}>Xuất SVG</button>
-      <button onClick={() => {
-        const el = document.getElementById('plan-canvas');
-        if (el) exportPdf(layout, el);
-      }}>Xuất PDF</button>
+      <button onClick={() => exportPdf(layout)}>Xuất PDF</button>
     </section>
   );
 }

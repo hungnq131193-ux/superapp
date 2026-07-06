@@ -36,3 +36,8 @@ button.autofix{background:#dc2626;color:#fff;width:100%;min-height:44px}
   .cards{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
   .canvasWrap{max-height:60vh}
 }
+
+/* ===== Pha 5: import/export ===== */
+.importErrors{max-width:1120px;margin:10px auto;border:2px solid #dc2626;background:#fef2f2;color:#7f1d1d}
+.importErrors ul{margin:8px 0;padding-left:20px}
+.dark .importErrors{background:#3f1d1d;color:#fecaca}

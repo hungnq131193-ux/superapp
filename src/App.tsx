@@ -11,12 +11,14 @@ import {ExportBar} from './components/ExportBar';
 import {useGenerator} from './hooks/useGenerator';
 import {useSavedLayouts} from './hooks/useSavedLayouts';
 import {useLayoutHistory} from './hooks/useLayoutHistory';
+import {parseLayoutJson} from './utils/importSchema';
 import type {DesignInput, Layout} from './types';
 import './styles/main.css';
 
 export default function App() {
   const [input, setInput] = useState<DesignInput>(defaultInput);
   const [dark, setDark] = useState(false);
+  const [importErrors, setImportErrors] = useState<string[]>([]);
   const {layouts, active, setActive, generating, generate, replace, prepend} = useGenerator();
   const {saved, save} = useSavedLayouts();
   const history = useLayoutHistory();
@@ -45,10 +47,15 @@ export default function App() {
   function importJson(f: File) {
     f.text()
       .then(t => {
-        const l = JSON.parse(t) as Layout;
-        prepend(l);
+        const result = parseLayoutJson(t);
+        if (result.ok) {
+          setImportErrors([]);
+          prepend(result.layout);
+        } else {
+          setImportErrors(result.errors);
+        }
       })
-      .catch(e => console.error('Không đọc được tệp JSON:', e));
+      .catch(() => setImportErrors(['Không đọc được tệp. Hãy thử lại với tệp JSON đã xuất từ ứng dụng này.']));
   }
 
   return (
@@ -59,6 +66,13 @@ export default function App() {
         <Wizard input={input} setInput={setInput} onGenerate={() => generate(input)} />
         <SavedLibrary saved={saved} onSelect={setActive} onImportFile={importJson} />
       </div>
+      {importErrors.length > 0 && (
+        <div className="importErrors panel" role="alert">
+          <b>Không nhập được tệp JSON:</b>
+          <ul>{importErrors.map((e, i) => <li key={i}>{e}</li>)}</ul>
+          <button onClick={() => setImportErrors([])}>Đóng</button>
+        </div>
+      )}
       {generating && <div className="loading">Đang sinh phương án theo ràng buộc…</div>}
       <CandidateList layouts={layouts} activeId={active?.id ?? null} onSelect={setActive} />
       {active && (
